@@ -1,9 +1,8 @@
 # app/main.py — Production v1 Entry Point (router only)
 #
 # IMPORTANT:
-# - Do NOT render UI here (no st.markdown, no st_autorefresh, no widgets)
-# - If you render anything here, it can create "phantom" layout artifacts.
 # - Keep this file as a clean router into pages/home.py
+# - Only exception: show a blocking error if API key is missing
 
 import sys
 import os
@@ -17,14 +16,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import streamlit as st
-
-# On Streamlit Cloud, .env doesn't exist — read API key from Streamlit secrets.
-# Configure secrets in the Cloud dashboard: Settings → Secrets → OPENAI_API_KEY = "sk-..."
-if not os.environ.get("OPENAI_API_KEY"):
-    try:
-        os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
-    except (KeyError, FileNotFoundError, AttributeError):
-        pass
 
 from paths import ensure_dirs
 from state import (
@@ -41,6 +32,26 @@ st.set_page_config(
     page_icon="TT",
     layout="wide",
 )
+
+# =============================================
+# API key: .env (local) → st.secrets (Cloud)
+# =============================================
+if not os.environ.get("OPENAI_API_KEY"):
+    try:
+        os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
+    except (KeyError, FileNotFoundError, AttributeError):
+        pass
+
+if not os.environ.get("OPENAI_API_KEY"):
+    st.error(
+        "**OPENAI_API_KEY is not configured.**\n\n"
+        "**Streamlit Cloud:** Go to your app dashboard → "
+        "**Settings** → **Secrets** and add:\n\n"
+        '```\nOPENAI_API_KEY = "sk-your-key-here"\n```\n\n'
+        "**Local:** Create a `.env` file in the project root with:\n\n"
+        '```\nOPENAI_API_KEY=sk-your-key-here\n```'
+    )
+    st.stop()
 
 # =============================================
 # Init (NO UI here)
