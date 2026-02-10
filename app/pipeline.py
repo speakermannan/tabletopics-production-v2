@@ -213,8 +213,6 @@ def _autopilot_waiting_to_listen():
 
 def _autopilot_check_timer_expired():
     """In listening phase, auto-stop when timer + grace period expires."""
-    if is_cloud():
-        return  # Cloud: user controls recording via st.audio_input widget
     from timer import elapsed_sec
     el = elapsed_sec()
     tgt = int(st.session_state.get("timer_target_sec", 90))
@@ -394,6 +392,12 @@ def run_pipeline() -> None:
                 wav_path=wav_path, model=model, prompt=prompt,
                 speaker=speaker, context=ctx,
             )
+        elif is_cloud() and not is_stop_inflight() and not has_latest_wav():
+            # Cloud: auto-stop fired but no audio was recorded — skip gracefully
+            st.session_state["awaiting_audio_stop"] = False
+            st.session_state["stt_last_error"] = "No audio recorded. Use the mic widget to record before time runs out."
+            st.session_state["system_state"] = "ready"
+            st.session_state["system_state_note"] = "No audio"
 
     # ── Autopilot state machine ──────────────────────────
     if autopilot and not paused:

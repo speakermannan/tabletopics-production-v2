@@ -348,7 +348,7 @@ def _render_listening_controls_cloud():
     mins, secs = divmod(el, 60)
 
     grace = int(st.session_state.get("grace_time_sec", 15))
-    stop_note = f"{label} — record below, then tap Stop Speaking"
+    stop_note = f"{label} — auto-stops {grace}s after red" if grace > 0 else f"{label} — auto-stops at red"
 
     st.markdown(
         f'<div style="text-align:center; padding:0.5rem 0;">'
@@ -359,12 +359,23 @@ def _render_listening_controls_cloud():
         unsafe_allow_html=True,
     )
 
-    # ── Browser mic widget ───────────────────────────────
-    audio_data = st.audio_input("Record your response", key="cloud_mic_input")
+    # ── Browser mic widget (unique key per speaker so it resets between turns) ──
+    speaker_idx = st.session_state.get("speaker_index", 0)
+    audio_data = st.audio_input(
+        "Tap mic to record, tap again to stop",
+        key=f"cloud_mic_{speaker_idx}",
+    )
 
-    # Show confirmation when audio is ready
-    if audio_data is not None:
-        st.success("Audio recorded. Tap **Stop Speaking** to continue.")
+    # Save audio eagerly as soon as widget returns data.
+    # This ensures auto-stop (timer expiry) can find the WAV on disk.
+    if audio_data is not None and not st.session_state.get("_cloud_audio_processed"):
+        wav_bytes = audio_data.getvalue()
+        if len(wav_bytes) > 1024:
+            save_cloud_audio(wav_bytes)
+            st.session_state["_cloud_audio_processed"] = True
+
+    if st.session_state.get("_cloud_audio_processed"):
+        st.success("Audio saved! Tap **Stop Speaking** or wait for auto-stop.")
 
     # ── Same button layout as local ──────────────────────
     c1, c2 = st.columns(2)
@@ -372,11 +383,6 @@ def _render_listening_controls_cloud():
         with st.container():
             st.markdown('<span class="btn-color-red"></span>', unsafe_allow_html=True)
             if st.button("Stop Speaking", use_container_width=True, key="btn_stop_early"):
-                if audio_data is not None:
-                    wav_bytes = audio_data.getvalue()
-                    if len(wav_bytes) > 1024:
-                        save_cloud_audio(wav_bytes)
-                        st.session_state["_cloud_audio_processed"] = True
                 listen_stop()
                 stop_timer()
                 st.session_state["awaiting_audio_stop"] = True
