@@ -218,6 +218,11 @@ def _autopilot_check_timer_expired():
     tgt = int(st.session_state.get("timer_target_sec", 90))
     grace = int(st.session_state.get("grace_time_sec", 15))
     if el >= tgt + grace:
+        # On Cloud, only advance if audio was actually recorded and saved.
+        # If no audio, stay in listening so the user can still record or skip.
+        # The UI will show a "time's up" warning.
+        if is_cloud() and not has_latest_wav():
+            return
         listen_stop()
         stop_timer()
         st.session_state["awaiting_audio_stop"] = True
@@ -238,11 +243,16 @@ def _autopilot_check_processing_complete():
         and not is_summarize_inflight()
         and not is_eval_inflight()
     ):
-        # All done — check if we have results
+        # All done — check if we have results OR errors
         has_eval = bool((st.session_state.get("evaluator_notes") or "").strip())
         has_summary = bool((st.session_state.get("last_summary") or "").strip())
         has_transcript = bool((st.session_state.get("current_transcript") or "").strip())
-        if has_eval or has_summary or has_transcript:
+        has_error = bool(
+            (st.session_state.get("stt_last_error") or "").strip()
+            or (st.session_state.get("summarizer_last_error") or "").strip()
+            or (st.session_state.get("evaluator_last_error") or "").strip()
+        )
+        if has_eval or has_summary or has_transcript or has_error:
             st.session_state["autopilot_phase"] = "turn_complete"
             st.session_state["system_state"] = "ready"
             st.session_state["system_state_note"] = "Turn complete — review results"

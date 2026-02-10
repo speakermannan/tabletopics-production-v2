@@ -332,11 +332,19 @@ def _render_listening_controls():
 
 
 def _render_listening_controls_cloud():
-    """Cloud listening: same layout as local + st.audio_input for recording."""
-    from audio_io import save_cloud_audio
+    """Cloud listening: same layout as local + st.audio_input for recording.
+
+    Key differences from local:
+    - st.audio_input replaces sounddevice (user taps mic widget to record)
+    - Audio is saved eagerly when widget returns data
+    - Auto-stop only advances if audio exists (stays in listening otherwise)
+    - Stop Speaking only advances if audio exists (warns otherwise)
+    - Widget key is per-speaker so it resets between turns
+    """
+    from audio_io import save_cloud_audio, has_latest_wav
     from timer import elapsed_sec, stoplight_state
 
-    # ── Same timer display as local ──────────────────────
+    # ── Timer display (identical to local) ───────────────
     el = elapsed_sec()
     tgt = int(st.session_state.get("timer_target_sec", 90))
     label, color = stoplight_state(el, tgt)
@@ -348,7 +356,12 @@ def _render_listening_controls_cloud():
     mins, secs = divmod(el, 60)
 
     grace = int(st.session_state.get("grace_time_sec", 15))
-    stop_note = f"{label} — auto-stops {grace}s after red" if grace > 0 else f"{label} — auto-stops at red"
+    timer_expired = el >= tgt + grace
+
+    if timer_expired and not has_latest_wav():
+        stop_note = "Time's up! Record below or skip"
+    else:
+        stop_note = f"{label} — auto-stops {grace}s after red" if grace > 0 else f"{label} — auto-stops at red"
 
     st.markdown(
         f'<div style="text-align:center; padding:0.5rem 0;">'
@@ -359,39 +372,51 @@ def _render_listening_controls_cloud():
         unsafe_allow_html=True,
     )
 
-    # ── Browser mic widget (unique key per speaker so it resets between turns) ──
+    # ── Browser mic widget (unique key per speaker) ──────
     speaker_idx = st.session_state.get("speaker_index", 0)
     audio_data = st.audio_input(
-        "Tap mic to record, tap again to stop",
+        "Tap to record, tap again to stop",
         key=f"cloud_mic_{speaker_idx}",
     )
 
-    # Save audio eagerly as soon as widget returns data.
-    # This ensures auto-stop (timer expiry) can find the WAV on disk.
+    # Save audio eagerly so auto-stop and Stop Speaking can find it.
     if audio_data is not None and not st.session_state.get("_cloud_audio_processed"):
         wav_bytes = audio_data.getvalue()
         if len(wav_bytes) > 1024:
             save_cloud_audio(wav_bytes)
             st.session_state["_cloud_audio_processed"] = True
 
+    # Status feedback
     if st.session_state.get("_cloud_audio_processed"):
         st.success("Audio saved! Tap **Stop Speaking** or wait for auto-stop.")
+    elif timer_expired:
+        st.warning("Time's up! Record your response above, or skip this speaker.")
 
-    # ── Same button layout as local ──────────────────────
+    # ── Buttons (same layout as local) ───────────────────
     c1, c2 = st.columns(2)
     with c1:
         with st.container():
             st.markdown('<span class="btn-color-red"></span>', unsafe_allow_html=True)
             if st.button("Stop Speaking", use_container_width=True, key="btn_stop_early"):
+                if has_latest_wav():
+                    listen_stop()
+                    stop_timer()
+                    st.session_state["awaiting_audio_stop"] = True
+                    st.session_state["system_state"] = "thinking"
+                    st.session_state["system_state_note"] = "Finalizing audio"
+                    st.session_state["autopilot_phase"] = "processing"
+                    st.rerun()
+                else:
+                    st.warning("Record your response first using the mic above.")
+    with c2:
+        with st.container():
+            st.markdown('<span class="btn-color-dark"></span>', unsafe_allow_html=True)
+            if st.button("Skip Speaker", use_container_width=True, key="btn_skip_cloud"):
                 listen_stop()
                 stop_timer()
-                st.session_state["awaiting_audio_stop"] = True
-                st.session_state["system_state"] = "thinking"
-                st.session_state["system_state_note"] = "Finalizing audio"
-                st.session_state["autopilot_phase"] = "processing"
+                skip_speaker(stop_timer)
+                st.session_state["autopilot_phase"] = "generating_question"
                 st.rerun()
-    with c2:
-        _render_next_speaker_disabled("listen")
 
 
 def _render_waiting_to_listen_controls(session_active):
