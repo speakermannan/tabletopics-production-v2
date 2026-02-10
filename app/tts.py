@@ -75,7 +75,11 @@ def generate_tts_mp3(
     """
     api_key = (os.getenv("OPENAI_API_KEY") or "").strip()
     if not api_key:
-        raise RuntimeError("OPENAI_API_KEY not found. Check your .env in the project root.")
+        raise RuntimeError(
+            "OPENAI_API_KEY not set. "
+            "Local: add to .env file. "
+            "Streamlit Cloud: add in app Settings → Secrets."
+        )
 
     text = _sanitize_spaces(text)
     if not text:

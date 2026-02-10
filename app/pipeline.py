@@ -285,6 +285,7 @@ def run_pipeline() -> None:
         or st.session_state.get("awaiting_summarize")
         or is_eval_inflight()
         or st.session_state.get("awaiting_evaluate")
+        or st.session_state.get("browser_recording")  # Cloud: keep polling while mic is active
         or (autopilot and not paused and phase in (
             "waiting_to_listen", "processing",
         ))

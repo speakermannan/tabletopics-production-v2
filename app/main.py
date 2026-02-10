@@ -11,7 +11,20 @@ import os
 # Ensure app/ directory is on sys.path for all page imports
 sys.path.insert(0, os.path.dirname(__file__))
 
+from dotenv import load_dotenv
+
+# Load .env for local development
+load_dotenv()
+
 import streamlit as st
+
+# On Streamlit Cloud, .env doesn't exist — read API key from Streamlit secrets.
+# Configure secrets in the Cloud dashboard: Settings → Secrets → OPENAI_API_KEY = "sk-..."
+if not os.environ.get("OPENAI_API_KEY"):
+    try:
+        os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
+    except (KeyError, FileNotFoundError, AttributeError):
+        pass
 
 from paths import ensure_dirs
 from state import (
