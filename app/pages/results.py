@@ -125,7 +125,9 @@ def _build_spoken_summary(results_list, theme_text, wod_text):
             continue
         bullets = [b.strip(" -•*\t") for b in re.split(r"[\n•\-\*]+", summary) if b.strip(" -•*\t")]
         kept = bullets[:2]
-        lines.append(f"{name}: {'. '.join(kept)}.")
+        # Bullets already start with the speaker's name from the summarizer,
+        # so join them directly without an extra name prefix.
+        lines.append(f"{'. '.join(kept)}.")
     lines.append("Great session everyone!")
     return " ".join(lines)
 

@@ -626,9 +626,10 @@ def _trigger_resummarize():
 
     theme = (st.session_state.get("theme") or "").strip()
     wod = (st.session_state.get("word_of_day") or "").strip()
+    speaker = get_current_speaker() or "the speaker"
     start_summarize_async(
-        transcript=transcript, theme=theme,
-        word_of_day=wod, model="gpt-4o-mini",
+        transcript=transcript, speaker=speaker,
+        theme=theme, word_of_day=wod, model="gpt-4o-mini",
     )
     st.rerun()
 

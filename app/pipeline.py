@@ -369,12 +369,13 @@ def run_pipeline() -> None:
                 transcript = (st.session_state.get("current_transcript") or "").strip()
                 if transcript and not is_summarize_inflight() and not st.session_state.get("awaiting_summarize"):
                     theme, wod = _theme_and_wod_for_summary()
+                    speaker = get_current_speaker() or "the speaker"
                     st.session_state["awaiting_summarize"] = True
                     st.session_state["system_state"] = "thinking"
                     st.session_state["system_state_note"] = "Summarizing answer"
                     start_summarize_async(
-                        transcript=transcript, theme=theme,
-                        word_of_day=wod, model="gpt-4o-mini",
+                        transcript=transcript, speaker=speaker,
+                        theme=theme, word_of_day=wod, model="gpt-4o-mini",
                     )
 
     # ── Auto-transcribe trigger ──────────────────────────

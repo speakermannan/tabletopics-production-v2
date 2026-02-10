@@ -43,6 +43,7 @@ def _client() -> OpenAI:
 def summarize_answer(
     transcript: str,
     *,
+    speaker: str = "",
     theme: str = "",
     word_of_day: str = "",
     model: str = "gpt-4o-mini",
@@ -60,6 +61,7 @@ def summarize_answer(
     if not transcript:
         return SummaryResult(summary="", used_llm=False, error="No transcript provided.")
 
+    speaker = _sanitize(speaker)
     theme = _sanitize(theme)
     word_of_day = _sanitize(word_of_day)
 
@@ -68,6 +70,7 @@ def summarize_answer(
     system = load_prompt("app/prompts/summarize_prompt.txt")
 
     user = {
+        "speaker": speaker or "the speaker",
         "theme": theme or None,
         "word_of_day": word_of_day or None,
         "transcript": transcript_for_prompt,
@@ -96,7 +99,7 @@ def summarize_answer(
             b = _sanitize(str(b))
             if not b:
                 continue
-            b = _cap_words(b, 12)
+            b = _cap_words(b, 15)
             clean.append(b)
 
         if not clean:
@@ -130,6 +133,7 @@ def is_summarize_inflight() -> bool:
 def _summarize_worker(
     *,
     transcript: str,
+    speaker: str,
     theme: str,
     word_of_day: str,
     model: str,
@@ -138,6 +142,7 @@ def _summarize_worker(
     try:
         res = summarize_answer(
             transcript=transcript,
+            speaker=speaker,
             theme=theme,
             word_of_day=word_of_day,
             model=model,
@@ -163,6 +168,7 @@ def _summarize_worker(
 def start_summarize_async(
     *,
     transcript: str,
+    speaker: str = "",
     theme: str,
     word_of_day: str,
     model: str = "gpt-4o-mini",
@@ -181,6 +187,7 @@ def start_summarize_async(
         target=_summarize_worker,
         kwargs={
             "transcript": transcript,
+            "speaker": speaker,
             "theme": theme,
             "word_of_day": word_of_day,
             "model": model,
