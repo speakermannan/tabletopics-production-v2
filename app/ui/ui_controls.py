@@ -333,7 +333,7 @@ def _render_listening_controls():
 
 def _render_listening_controls_cloud():
     """Cloud listening: same layout as local + st.audio_input for recording."""
-    from audio_io import save_cloud_audio, has_latest_wav
+    from audio_io import save_cloud_audio
     from timer import elapsed_sec, stoplight_state
 
     # ── Same timer display as local ──────────────────────
@@ -347,12 +347,14 @@ def _render_listening_controls_cloud():
     }.get(color, "#8892A8")
     mins, secs = divmod(el, 60)
 
+    grace = int(st.session_state.get("grace_time_sec", 15))
+    stop_note = f"{label} — record below, then tap Stop Speaking"
+
     st.markdown(
         f'<div style="text-align:center; padding:0.5rem 0;">'
         f'<span style="font-size:1.8rem; font-weight:800; font-family:monospace; '
         f'color:{color_hex};">{mins}:{secs:02d}</span>'
-        f'<div style="font-size:0.7rem; color:#8892A8; margin-top:0.2rem;">'
-        f'{label} — record below, then tap Stop</div>'
+        f'<div style="font-size:0.7rem; color:#8892A8; margin-top:0.2rem;">{stop_note}</div>'
         f'</div>',
         unsafe_allow_html=True,
     )
@@ -360,18 +362,9 @@ def _render_listening_controls_cloud():
     # ── Browser mic widget ───────────────────────────────
     audio_data = st.audio_input("Record your response", key="cloud_mic_input")
 
-    # Auto-advance when user finishes recording in the widget
-    if audio_data is not None and not st.session_state.get("_cloud_audio_processed"):
-        wav_bytes = audio_data.getvalue()
-        if len(wav_bytes) > 1024:
-            save_cloud_audio(wav_bytes)
-            st.session_state["_cloud_audio_processed"] = True
-            stop_timer()
-            st.session_state["awaiting_audio_stop"] = True
-            st.session_state["system_state"] = "thinking"
-            st.session_state["system_state_note"] = "Processing audio"
-            st.session_state["autopilot_phase"] = "processing"
-            st.rerun()
+    # Show confirmation when audio is ready
+    if audio_data is not None:
+        st.success("Audio recorded. Tap **Stop Speaking** to continue.")
 
     # ── Same button layout as local ──────────────────────
     c1, c2 = st.columns(2)
@@ -379,21 +372,18 @@ def _render_listening_controls_cloud():
         with st.container():
             st.markdown('<span class="btn-color-red"></span>', unsafe_allow_html=True)
             if st.button("Stop Speaking", use_container_width=True, key="btn_stop_early"):
-                # Process any recorded audio, then advance
-                if audio_data is not None and not st.session_state.get("_cloud_audio_processed"):
+                if audio_data is not None:
                     wav_bytes = audio_data.getvalue()
                     if len(wav_bytes) > 1024:
                         save_cloud_audio(wav_bytes)
                         st.session_state["_cloud_audio_processed"] = True
+                listen_stop()
                 stop_timer()
-                if st.session_state.get("_cloud_audio_processed") or has_latest_wav():
-                    st.session_state["awaiting_audio_stop"] = True
-                    st.session_state["system_state"] = "thinking"
-                    st.session_state["system_state_note"] = "Finalizing audio"
-                    st.session_state["autopilot_phase"] = "processing"
-                    st.rerun()
-                else:
-                    st.warning("Record your response first using the mic above.")
+                st.session_state["awaiting_audio_stop"] = True
+                st.session_state["system_state"] = "thinking"
+                st.session_state["system_state_note"] = "Finalizing audio"
+                st.session_state["autopilot_phase"] = "processing"
+                st.rerun()
     with c2:
         _render_next_speaker_disabled("listen")
 
