@@ -1,0 +1,66 @@
+You are working on an existing Streamlit app.  
+Create a NEW git branch called `sound1`. Do NOT modify main.
+
+Context:
+This app currently captures microphone audio using Python `sounddevice`, which works locally but fails on Streamlit Cloud because server-side audio cannot access the user’s microphone.
+
+Goal:
+Implement TRUE browser-based microphone capture so audio works when deployed (Streamlit Cloud compatible), WITHOUT breaking existing app logic, session_state keys, or the audio → STT → summary pipeline.
+
+High-level requirement:
+- Replace server-side mic capture with **client-side browser audio capture**
+- Send recorded audio bytes to the backend
+- Feed those bytes into the existing transcription pipeline
+- Preserve all downstream behavior (summaries, evaluation, timing, UI state)
+
+Critical constraints (do not violate):
+- Do NOT remove or rewrite the summarizer, evaluator, timer, or pipeline logic
+- Do NOT rename or change existing session_state keys
+- Do NOT change page routing or navigation
+- Keep existing Live page UX flow (Start Listening → Stop → Process)
+- Desktop local behavior may be deprecated if needed; Cloud compatibility is mandatory
+
+Implementation approach (required):
+1) Implement browser audio capture using Streamlit-supported Web APIs:
+   - Use `st.components.v1.html()` with JavaScript
+   - Use `navigator.mediaDevices.getUserMedia`
+   - Use `MediaRecorder`
+2) Record audio in WAV or WEBM, then convert to WAV in JS if necessary
+3) Send audio data back to Streamlit via:
+   - `postMessage` + Streamlit component API OR
+   - base64 encoded payload returned from the component
+4) On the Python side:
+   - Receive audio bytes
+   - Write to a temp WAV file (same format expected by current STT code)
+   - Pass file path to the existing transcription function (unchanged)
+
+Code structure expectations:
+- Create a new module: `app/audio_browser.py`
+- Keep `audio_io.py` as the integration layer
+- `ui_controls.py` should switch to browser mic automatically when running in Cloud
+- Add clear environment detection (Cloud vs Local)
+
+UI behavior:
+- Live page buttons must still say:
+  - “Start Listening”
+  - “Stop Listening”
+- While recording, show a subtle “Recording…” indicator
+- If mic permission is denied, show a friendly error (do not crash)
+
+Deliverables:
+1) New branch: `sound1`
+2) New browser audio capture component (JS + Python bridge)
+3) Updated audio integration that works on Streamlit Cloud
+4) Brief inline comments explaining data flow (browser → backend → STT)
+
+Non-goals:
+- Do NOT refactor unrelated UI
+- Do NOT introduce new frameworks
+- Do NOT convert this to a different app architecture
+
+Assume:
+- Python 3.11
+- Streamlit Cloud environment
+- OpenAI STT expects a WAV file path
+
+Proceed step-by-step, commit logically, and explain each change as you go.
