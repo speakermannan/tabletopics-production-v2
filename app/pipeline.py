@@ -213,6 +213,8 @@ def _autopilot_waiting_to_listen():
 
 def _autopilot_check_timer_expired():
     """In listening phase, auto-stop when timer + grace period expires."""
+    if is_cloud():
+        return  # Cloud: user controls recording via st.audio_input widget
     from timer import elapsed_sec
     el = elapsed_sec()
     tgt = int(st.session_state.get("timer_target_sec", 90))
@@ -263,15 +265,6 @@ def run_pipeline() -> None:
     phase_before = phase
     paused = st.session_state.get("autopilot_paused", False)
 
-    # ── Browser audio component (Cloud mode) ────────────
-    # Renders an invisible Streamlit component that captures mic audio in the
-    # browser via JS.  When the component sends recorded WAV data back, it is
-    # saved to disk so the existing has_latest_wav() / auto-transcribe flow
-    # picks it up exactly as it would for server-side recording.
-    if is_cloud():
-        from audio_browser import render_browser_audio
-        render_browser_audio()
-
     # ── Autorefresh polling ──────────────────────────────
     if st.session_state.get("timer_running") and st.session_state.get("system_state") != "thinking":
         st_autorefresh(interval=1000, key="stoplight_tick")
@@ -285,7 +278,6 @@ def run_pipeline() -> None:
         or st.session_state.get("awaiting_summarize")
         or is_eval_inflight()
         or st.session_state.get("awaiting_evaluate")
-        or st.session_state.get("browser_recording")  # Cloud: keep polling while mic is active
         or (autopilot and not paused and phase in (
             "waiting_to_listen", "processing",
         ))

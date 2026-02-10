@@ -94,9 +94,9 @@ def listen_start() -> None:
         _stop_path = None
 
     if is_cloud():
-        # Browser handles recording via the browser_audio component.
-        # Setting this flag tells the JS component to start mic capture.
-        st.session_state["browser_recording"] = True
+        # Cloud: st.audio_input widget handles mic capture in the browser.
+        # Reset the processing flag so the new audio gets handled.
+        st.session_state["_cloud_audio_processed"] = False
         st.session_state["system_state"] = "listening"
         return
 
@@ -140,9 +140,7 @@ def listen_stop() -> None:
     st.session_state["system_state"] = "idle"
 
     if is_cloud():
-        # Signal the browser component to stop recording.
-        # Audio bytes will arrive via render_browser_audio() on the next rerun.
-        st.session_state["browser_recording"] = False
+        # Cloud: nothing to tear down — st.audio_input handles its own lifecycle.
         return
 
     with _stop_lock:
@@ -158,6 +156,24 @@ def listen_stop() -> None:
 
     t = threading.Thread(target=_stop_worker, args=(save_path,), daemon=True)
     t.start()
+
+
+def save_cloud_audio(wav_bytes: bytes) -> str:
+    """Save browser-captured WAV bytes to disk (Cloud mode via st.audio_input).
+
+    Writes to both a timestamped recording file and the latest.wav
+    convenience copy, matching the same output as server-side recorder.
+    """
+    _ensure_dirs()
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    save_path = os.path.join(RECORDINGS_DIR, f"recording_{ts}.wav")
+    with open(save_path, "wb") as f:
+        f.write(wav_bytes)
+    _safe_remove(LATEST_WAV)
+    with open(LATEST_WAV, "wb") as f:
+        f.write(wav_bytes)
+    st.session_state["latest_wav_path"] = save_path
+    return save_path
 
 
 def pop_stop_result() -> Tuple[bool, Optional[str], Optional[str]]:
