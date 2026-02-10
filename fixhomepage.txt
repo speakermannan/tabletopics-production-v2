@@ -1,0 +1,38 @@
+I want the Home page to match the look of `goodohome.png` (the “good” reference).
+
+Current state (see attached current screenshot):
+- Nav items are stretched far apart across the entire top bar (too wide, too airy)
+- The top bar feels disconnected from the hero
+- Spacing + alignment do not match the “goodohome” reference
+
+Target (must match `goodohome.png`):
+- A clean top area with a centered, compact navigation layout
+- The nav should NOT be spread across the full width
+- The logo should sit near the left of the nav cluster (not far left edge)
+- The nav should feel like it belongs to the page content width (like max-width 980–1200), not edge-to-edge spacing
+- The overall look should feel “tight and calm” like the reference
+- If the reference includes a centered “Home” title, replicate that as well (but keep it subtle)
+
+Constraints:
+- Keep nav as Streamlit buttons (st.button), not HTML anchors
+- Do not touch engine logic, routing, or state machine
+- Do not replace Streamlit or convert to React
+- No background images; CSS only
+- Keep the hero card HTML intact and unchanged
+
+Task:
+1) Compare `goodohome.png` vs the current screenshot and list the 3–5 concrete visual differences (alignment, spacing, width behavior, typography).
+2) Modify ONLY the header/nav section to visually match `goodohome.png`:
+   - Constrain the nav container to the same width as the hero card (e.g., min(980px, 100%))
+   - Center the nav cluster within that container
+   - Reduce horizontal spacing between items
+   - Ensure the logo aligns with the nav cluster (not floating far left)
+3) Provide exact changes in:
+   - `app/pages/home.py` (header/nav section only)
+   - `app/ui/styles.py` (CSS for the top nav container + buttons only)
+
+Acceptance criteria:
+- The top area and nav alignment look essentially the same as `goodohome.png`
+- Nav is not spread across full width; it’s compact and centered
+- Logo placement matches the reference feel
+- Hero card remains unchanged

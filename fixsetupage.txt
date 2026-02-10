@@ -1,0 +1,41 @@
+Unify page shell: Setup must be a continuation of Home page layout (same top menu + same container), only the main content changes.
+
+Context:
+- Home page UI is now correct (top nav/menu + centered content container + light grey background).
+- Setup page UI is now correct (two-column card layout), and functionality must NOT change.
+- The problem is consistency: Setup should feel like the next page in the same app, not a different layout.
+
+Hard requirements:
+1) Keep ALL setup functionality exactly the same:
+   - same session_state keys
+   - same callbacks
+   - same buttons and behavior
+   - same roster management
+   - do not remove or rename widgets
+   - do not change engine/state machine logic
+2) Apply the same “shell” from Home to Setup:
+   - same top menu/nav bar component (logo + Home/Setup/Live/Results buttons)
+   - same background color and spacing
+   - same max-width centered layout (same as hero card width rules)
+   - no Streamlit sidebar
+3) The Home hero content should be conceptually replaced by Setup content:
+   - Home: hero card + feature cards
+   - Setup: setup content cards inside the same centered content area
+   - The top nav remains constant across both pages
+
+Implementation guidance (important):
+- Do NOT duplicate the nav bar code differently per page. Extract it to a reusable function/component (e.g., `ui/nav.py` or `ui/layout.py`) and call it from both Home and Setup.
+- Keep markup blocks self-contained. Do not wrap Streamlit widgets inside open HTML tags in a way that breaks DOM.
+- Keep CSS in `app/ui/styles.py` and reuse the same classes used on Home.
+
+Your deliverables:
+1) A small shared UI component for the top nav (used by both Home + Setup)
+2) Update `app/pages/home.py` and `app/pages/setup.py` to use that shared nav/shell
+3) Ensure Setup content sits in the same “main content container” position where Home’s hero card sits
+4) Confirm functionality is unchanged (explicitly list what you did NOT modify)
+
+Acceptance criteria:
+- When switching Home → Setup, the top nav and overall frame stays identical
+- Only the main content changes (hero becomes setup cards)
+- No sidebar appears
+- Setup behaves exactly as before

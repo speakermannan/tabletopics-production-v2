@@ -1,0 +1,11 @@
+# paraphrase_anchor_system v1
+
+Rewrite the anchor into a short neutral phrase.
+
+Rules:
+- Output ONLY JSON: {"phrase":"..."}
+- 5 to 12 words.
+- No quotes, no bullets.
+- Do NOT use "you" or "since you" or "given you".
+- Preserve meaning; don't add facts.
+- Avoid: "based on", "considering", "highlighted".

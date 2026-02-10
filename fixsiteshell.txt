@@ -1,0 +1,52 @@
+We tried a general “unify shell” request and nothing changed.
+Now do this explicitly and with minimal risk.
+
+Objective:
+Make ALL pages use the SAME shell by implementing ONE shared function and wiring every page to it.
+
+Hard constraints (non-negotiable):
+- Do NOT change any functionality
+- Do NOT change any session_state keys
+- Do NOT change callbacks or button actions
+- Do NOT remove or replace widgets
+- Nav buttons must remain Streamlit st.button
+- Keep existing page logic intact; only move layout wrappers
+
+Required implementation (do exactly this):
+1) Create a new file: `app/ui/shell.py`
+
+It must expose:
+- `render_shell_start(active: str, title: str | None = None)`
+- `render_shell_end()`
+
+`render_shell_start` must:
+- call `inject_global_styles()` from `app/ui/styles.py`
+- render the same top navigation used on the Home page (logo + Home/Setup/Live/Results) using st.button
+- open a consistent centered content area (same max width behavior across pages)
+
+`render_shell_end` must:
+- render the shared footer (same everywhere)
+
+2) Update these pages to use the shell:
+- `app/pages/home.py`
+- `app/pages/setup.py`
+- `app/pages/live.py`
+- `app/pages/results.py`
+
+Each page must follow this exact pattern:
+- call `render_shell_start(active="home"/"setup"/"live"/"results")`
+- render existing page content (UNCHANGED)
+- call `render_shell_end()`
+
+3) Remove any duplicated nav/footer code from individual pages (but keep their page-specific content).
+
+Deliverables:
+- Full content of new `app/ui/shell.py`
+- Diffs (or full updated files) for home.py, setup.py, live.py, results.py
+- A short checklist confirming you did NOT touch logic: session_state keys, callbacks, engine modules.
+
+Acceptance criteria:
+- Visual nav and footer are identical across all pages
+- Page background and max-width spacing are identical across all pages
+- Only inner content changes per page
+- No sidebar appears

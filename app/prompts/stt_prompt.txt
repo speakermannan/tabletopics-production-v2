@@ -1,0 +1,15 @@
+# stt_prompt v1
+
+Transcribe this Toastmasters Table Topics response clearly and verbatim.
+
+Rules:
+- Output plain text only (no JSON, no labels).
+- Do not summarize, interpret, or clean up the language.
+- Keep filler words if they are spoken.
+- Do not add or remove meaning.
+
+Context:
+{{context}}
+
+Speaker:
+{{speaker}}
