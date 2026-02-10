@@ -22,7 +22,7 @@ from state import (
 from evaluator import start_evaluate_async, pop_evaluate_result, is_eval_inflight
 from summarizer import start_summarize_async, pop_summarize_result, is_summarize_inflight
 from stt import start_transcribe_async, pop_transcribe_result, is_transcribe_inflight
-from audio_io import listen_start, listen_stop, has_latest_wav, get_latest_wav_path, is_stop_inflight
+from audio_io import listen_start, listen_stop, has_latest_wav, get_latest_wav_path, is_stop_inflight, is_cloud
 from coach import generate_coach_hint
 from timer import start_timer, stop_timer
 from tts import generate_tts_mp3, tts_preprocess
@@ -262,6 +262,15 @@ def run_pipeline() -> None:
     phase = st.session_state.get("autopilot_phase", "idle")
     phase_before = phase
     paused = st.session_state.get("autopilot_paused", False)
+
+    # ── Browser audio component (Cloud mode) ────────────
+    # Renders an invisible Streamlit component that captures mic audio in the
+    # browser via JS.  When the component sends recorded WAV data back, it is
+    # saved to disk so the existing has_latest_wav() / auto-transcribe flow
+    # picks it up exactly as it would for server-side recording.
+    if is_cloud():
+        from audio_browser import render_browser_audio
+        render_browser_audio()
 
     # ── Autorefresh polling ──────────────────────────────
     if st.session_state.get("timer_running") and st.session_state.get("system_state") != "thinking":

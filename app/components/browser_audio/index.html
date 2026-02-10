@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: transparent; overflow: hidden; }
+  .rec-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    color: #FF3366;
+  }
+  .rec-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #FF3366;
+    animation: blink 1.2s ease-in-out infinite;
+  }
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+  .error-msg {
+    padding: 6px 12px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 12px;
+    color: #FF6B35;
+  }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+  <div id="indicator" class="hidden">
+    <div class="rec-indicator">
+      <div class="rec-dot"></div>
+      <span>Recording...</span>
+    </div>
+  </div>
+  <div id="error" class="error-msg hidden"></div>
+
+<script>
+/**
+ * Browser Audio Capture Component for Streamlit Cloud
+ *
+ * Data flow:
+ *   1. Python sends { recording: true/false } via Streamlit render event
+ *   2. On recording=true:  getUserMedia -> AudioContext -> ScriptProcessor -> buffer PCM samples
+ *   3. On recording=false: stop capture -> encode buffered samples as WAV -> base64 -> setComponentValue
+ *   4. Python receives { id, audio, sampleRate } and writes WAV file to disk
+ *   5. Existing STT pipeline picks up the WAV file for transcription
+ */
+
+// -- Streamlit iframe communication protocol ---------------------------------
+
+function sendMsg(type, data) {
+  window.parent.postMessage(
+    Object.assign({ isStreamlitMessage: true, type: type }, data), "*"
+  );
+}
+
+function setReady()   { sendMsg("streamlit:componentReady", { apiVersion: 1 }); }
+function setHeight(h) { sendMsg("streamlit:setFrameHeight", { height: h }); }
+function setValue(v)   { sendMsg("streamlit:componentValue", { value: v }); }
+
+// -- Recording state ---------------------------------------------------------
+
+var audioCtx    = null;
+var sourceNode  = null;
+var procNode    = null;
+var micStream   = null;
+var chunks      = [];
+var isRecording = false;
+var prevRecArg  = false;  // last recording arg received from Python
+
+// -- Start / Stop capture ----------------------------------------------------
+
+async function startCapture() {
+  if (isRecording) return;
+
+  var el    = document.getElementById("indicator");
+  var errEl = document.getElementById("error");
+
+  try {
+    // Request microphone access (mono, with noise suppression)
+    micStream = await navigator.mediaDevices.getUserMedia({
+      audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true }
+    });
+
+    // Try 16 kHz sample rate (smaller files); fall back to browser default
+    try { audioCtx = new AudioContext({ sampleRate: 16000 }); }
+    catch (_) { audioCtx = new AudioContext(); }
+
+    sourceNode = audioCtx.createMediaStreamSource(micStream);
+    // Buffer size 4096 is a good balance between latency and performance
+    procNode   = audioCtx.createScriptProcessor(4096, 1, 1);
+    chunks     = [];
+
+    // Capture raw PCM float32 samples from the mic
+    procNode.onaudioprocess = function(e) {
+      if (isRecording) {
+        chunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+      }
+    };
+
+    sourceNode.connect(procNode);
+    procNode.connect(audioCtx.destination);
+    isRecording = true;
+
+    el.classList.remove("hidden");
+    errEl.classList.add("hidden");
+    setHeight(30);
+  } catch (err) {
+    errEl.textContent = "Microphone access denied. Please allow mic access in your browser settings.";
+    errEl.classList.remove("hidden");
+    setHeight(24);
+  }
+}
+
+function stopCapture() {
+  if (!isRecording) return;
+  isRecording = false;
+
+  document.getElementById("indicator").classList.add("hidden");
+
+  // Tear down audio graph
+  if (procNode)   { procNode.disconnect();  procNode   = null; }
+  if (sourceNode) { sourceNode.disconnect(); sourceNode = null; }
+  if (micStream)  { micStream.getTracks().forEach(function(t) { t.stop(); }); micStream = null; }
+
+  var rate = audioCtx ? audioCtx.sampleRate : 16000;
+  if (audioCtx) { audioCtx.close(); audioCtx = null; }
+
+  if (chunks.length === 0) { setHeight(0); return; }
+
+  // Concatenate all float32 chunks into one buffer
+  var total = 0;
+  for (var i = 0; i < chunks.length; i++) total += chunks[i].length;
+  var samples = new Float32Array(total);
+  var off = 0;
+  for (var i = 0; i < chunks.length; i++) {
+    samples.set(chunks[i], off);
+    off += chunks[i].length;
+  }
+  chunks = [];
+
+  // Encode as WAV and send to Python via base64
+  var wavBlob = encodeWAV(samples, rate);
+  var reader = new FileReader();
+  reader.onloadend = function() {
+    var b64 = reader.result.split(",")[1];
+    setValue({ id: String(Date.now()), audio: b64, sampleRate: rate });
+    setHeight(0);
+  };
+  reader.readAsDataURL(wavBlob);
+}
+
+// -- WAV encoder (float32 PCM -> 16-bit PCM WAV) ----------------------------
+
+function encodeWAV(samples, sampleRate) {
+  var nCh        = 1;
+  var bps        = 16;
+  var byteRate   = sampleRate * nCh * bps / 8;
+  var blockAlign = nCh * bps / 8;
+  var dataBytes  = samples.length * blockAlign;
+  var buf        = new ArrayBuffer(44 + dataBytes);
+  var dv         = new DataView(buf);
+
+  // RIFF header
+  writeStr(dv, 0, "RIFF");
+  dv.setUint32(4, 36 + dataBytes, true);
+  writeStr(dv, 8, "WAVE");
+
+  // fmt sub-chunk
+  writeStr(dv, 12, "fmt ");
+  dv.setUint32(16, 16, true);            // fmt chunk size
+  dv.setUint16(20, 1, true);             // audio format = PCM
+  dv.setUint16(22, nCh, true);           // channels
+  dv.setUint32(24, sampleRate, true);    // sample rate
+  dv.setUint32(28, byteRate, true);      // byte rate
+  dv.setUint16(32, blockAlign, true);    // block align
+  dv.setUint16(34, bps, true);           // bits per sample
+
+  // data sub-chunk
+  writeStr(dv, 36, "data");
+  dv.setUint32(40, dataBytes, true);
+
+  // Convert float32 samples to int16 and write
+  var p = 44;
+  for (var i = 0; i < samples.length; i++) {
+    var s = samples[i];
+    s = s < -1 ? -1 : (s > 1 ? 1 : s);
+    dv.setInt16(p, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+    p += 2;
+  }
+
+  return new Blob([buf], { type: "audio/wav" });
+}
+
+function writeStr(dv, offset, str) {
+  for (var i = 0; i < str.length; i++) {
+    dv.setUint8(offset + i, str.charCodeAt(i));
+  }
+}
+
+// -- Listen for Streamlit render events --------------------------------------
+
+window.addEventListener("message", function(event) {
+  if (!event.data || event.data.type !== "streamlit:render") return;
+  var args = event.data.args || {};
+  var rec  = !!args.recording;
+
+  if (rec && !prevRecArg)   startCapture();
+  if (!rec && prevRecArg)   stopCapture();
+  prevRecArg = rec;
+});
+
+// Release mic if user navigates away
+window.addEventListener("beforeunload", function() {
+  if (isRecording) stopCapture();
+});
+
+// Signal ready to Streamlit
+setReady();
+setHeight(0);
+</script>
+</body>
+</html>

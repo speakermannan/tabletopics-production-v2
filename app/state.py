@@ -124,6 +124,7 @@ DEFAULT_STATE = {
     "grace_time_sec": 15,
 
     # Audio & Voice
+    "browser_recording": False,   # True when browser mic is actively capturing
     "mic_device": "",
     "tts_voice": "nova",
     "tts_model": "tts-1",
@@ -279,6 +280,7 @@ def clear_turn_fields(stop_timer_fn) -> None:
     st.session_state["evaluator_notes"] = ""
     st.session_state["evaluator_last_error"] = ""
     st.session_state["prep_countdown_start_ts"] = 0.0
+    st.session_state["browser_recording"] = False
     stop_timer_fn()
     set_system_state("idle")
 

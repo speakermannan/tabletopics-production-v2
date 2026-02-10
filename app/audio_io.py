@@ -5,13 +5,19 @@ from datetime import datetime
 from typing import Optional, Tuple
 
 import streamlit as st
-from recorder import AudioRecorder, RecorderConfig
+
+# Conditional import: sounddevice/recorder not available on Streamlit Cloud
+try:
+    from recorder import AudioRecorder, RecorderConfig
+    _HAS_SOUNDDEVICE = True
+except (ImportError, OSError):
+    _HAS_SOUNDDEVICE = False
 
 AUDIO_DIR = "audio"
 RECORDINGS_DIR = os.path.join(AUDIO_DIR, "recordings")
 LATEST_WAV = os.path.join(AUDIO_DIR, "latest.wav")
 
-_recorder: Optional[AudioRecorder] = None
+_recorder = None
 
 _stop_lock = threading.Lock()
 _stop_inflight = False
@@ -20,9 +26,20 @@ _stop_error: Optional[str] = None
 _stop_path: Optional[str] = None
 
 
-def _get_recorder() -> AudioRecorder:
+def is_cloud() -> bool:
+    """Detect if running on Streamlit Cloud (no local sounddevice hardware).
+
+    Returns True when sounddevice is unavailable, which means
+    browser-based mic capture must be used instead.
+    """
+    return not _HAS_SOUNDDEVICE
+
+
+def _get_recorder():
     global _recorder
     if _recorder is None:
+        if not _HAS_SOUNDDEVICE:
+            raise RuntimeError("sounddevice not available — use browser audio on Cloud")
         _recorder = AudioRecorder(RecorderConfig(samplerate=16000, channels=1, dtype="int16"))
     return _recorder
 
@@ -60,7 +77,7 @@ def is_stop_inflight() -> bool:
 def listen_start() -> None:
     _ensure_dirs()
 
-    # Clear stale UI state so we don't “reuse” old transcript
+    # Clear stale UI state so we don't "reuse" old transcript
     st.session_state["current_transcript"] = ""
     st.session_state["stt_last_error"] = ""
     st.session_state["last_transcript_file"] = ""
@@ -75,6 +92,13 @@ def listen_start() -> None:
         _stop_done = False
         _stop_error = None
         _stop_path = None
+
+    if is_cloud():
+        # Browser handles recording via the browser_audio component.
+        # Setting this flag tells the JS component to start mic capture.
+        st.session_state["browser_recording"] = True
+        st.session_state["system_state"] = "listening"
+        return
 
     _get_recorder().start()
     st.session_state["system_state"] = "listening"
@@ -114,6 +138,12 @@ def listen_stop() -> None:
     global _stop_inflight, _stop_done, _stop_error, _stop_path
 
     st.session_state["system_state"] = "idle"
+
+    if is_cloud():
+        # Signal the browser component to stop recording.
+        # Audio bytes will arrive via render_browser_audio() on the next rerun.
+        st.session_state["browser_recording"] = False
+        return
 
     with _stop_lock:
         if _stop_inflight:
