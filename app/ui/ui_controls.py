@@ -332,24 +332,38 @@ def _render_listening_controls():
 
 
 def _render_listening_controls_cloud():
-    """Cloud listening: st.audio_input widget replaces server-side mic."""
-    from audio_io import save_cloud_audio
+    """Cloud listening: same layout as local + st.audio_input for recording."""
+    from audio_io import save_cloud_audio, has_latest_wav
     from timer import elapsed_sec, stoplight_state
 
+    # ── Same timer display as local ──────────────────────
+    el = elapsed_sec()
+    tgt = int(st.session_state.get("timer_target_sec", 90))
+    label, color = stoplight_state(el, tgt)
+    color_hex = {
+        "neutral": "#8892A8",
+        "green": "#00D4AA",
+        "orange": "#FF6B35", "red": "#FF3366",
+    }.get(color, "#8892A8")
+    mins, secs = divmod(el, 60)
+
     st.markdown(
-        '<div style="text-align:center; padding:0.3rem 0; color:#8892A8; font-size:0.8rem;">'
-        'Record your response using the microphone below</div>',
+        f'<div style="text-align:center; padding:0.5rem 0;">'
+        f'<span style="font-size:1.8rem; font-weight:800; font-family:monospace; '
+        f'color:{color_hex};">{mins}:{secs:02d}</span>'
+        f'<div style="font-size:0.7rem; color:#8892A8; margin-top:0.2rem;">'
+        f'{label} — record below, then tap Stop</div>'
+        f'</div>',
         unsafe_allow_html=True,
     )
 
-    audio_data = st.audio_input(
-        "Record your response",
-        key="cloud_mic_input",
-    )
+    # ── Browser mic widget ───────────────────────────────
+    audio_data = st.audio_input("Record your response", key="cloud_mic_input")
 
+    # Auto-advance when user finishes recording in the widget
     if audio_data is not None and not st.session_state.get("_cloud_audio_processed"):
-        wav_bytes = audio_data.read()
-        if len(wav_bytes) > 1024:  # Minimum viable audio size
+        wav_bytes = audio_data.getvalue()
+        if len(wav_bytes) > 1024:
             save_cloud_audio(wav_bytes)
             st.session_state["_cloud_audio_processed"] = True
             stop_timer()
@@ -359,36 +373,29 @@ def _render_listening_controls_cloud():
             st.session_state["autopilot_phase"] = "processing"
             st.rerun()
 
-    # Show timer as reference (display only, no auto-stop on Cloud)
-    el = elapsed_sec()
-    tgt = int(st.session_state.get("timer_target_sec", 90))
-    label, color = stoplight_state(el, tgt)
-    color_hex = {
-        "neutral": "#8892A8", "green": "#00D4AA",
-        "orange": "#FF6B35", "red": "#FF3366",
-    }.get(color, "#8892A8")
-    mins, secs = divmod(el, 60)
-
-    st.markdown(
-        f'<div style="text-align:center; padding:0.3rem 0;">'
-        f'<span style="font-size:1.2rem; font-weight:700; font-family:monospace; '
-        f'color:{color_hex};">{mins}:{secs:02d}</span>'
-        f'<div style="font-size:0.65rem; color:#8892A8;">{label}</div>'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
-
-    # Skip button
+    # ── Same button layout as local ──────────────────────
     c1, c2 = st.columns(2)
     with c1:
-        pass  # Spacer — no "Stop Speaking" needed on Cloud
-    with c2:
         with st.container():
-            st.markdown('<span class="btn-color-dark"></span>', unsafe_allow_html=True)
-            if st.button("Skip Speaker", use_container_width=True, key="btn_skip_cloud"):
-                skip_speaker(stop_timer)
-                st.session_state["autopilot_phase"] = "generating_question"
-                st.rerun()
+            st.markdown('<span class="btn-color-red"></span>', unsafe_allow_html=True)
+            if st.button("Stop Speaking", use_container_width=True, key="btn_stop_early"):
+                # Process any recorded audio, then advance
+                if audio_data is not None and not st.session_state.get("_cloud_audio_processed"):
+                    wav_bytes = audio_data.getvalue()
+                    if len(wav_bytes) > 1024:
+                        save_cloud_audio(wav_bytes)
+                        st.session_state["_cloud_audio_processed"] = True
+                stop_timer()
+                if st.session_state.get("_cloud_audio_processed") or has_latest_wav():
+                    st.session_state["awaiting_audio_stop"] = True
+                    st.session_state["system_state"] = "thinking"
+                    st.session_state["system_state_note"] = "Finalizing audio"
+                    st.session_state["autopilot_phase"] = "processing"
+                    st.rerun()
+                else:
+                    st.warning("Record your response first using the mic above.")
+    with c2:
+        _render_next_speaker_disabled("listen")
 
 
 def _render_waiting_to_listen_controls(session_active):

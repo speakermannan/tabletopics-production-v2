@@ -266,7 +266,10 @@ def run_pipeline() -> None:
     paused = st.session_state.get("autopilot_paused", False)
 
     # ── Autorefresh polling ──────────────────────────────
-    if st.session_state.get("timer_running") and st.session_state.get("system_state") != "thinking":
+    # On Cloud during listening, skip timer autorefresh — it can disrupt st.audio_input.
+    # Timer display will be static on Cloud but recording works reliably.
+    _skip_timer_tick = is_cloud() and phase == "listening"
+    if st.session_state.get("timer_running") and st.session_state.get("system_state") != "thinking" and not _skip_timer_tick:
         st_autorefresh(interval=1000, key="stoplight_tick")
 
     needs_poll = (
